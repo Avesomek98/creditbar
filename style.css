@@ -4,11 +4,11 @@
   --bg-glow-2: #fecdd3;
   --surface: rgba(255, 255, 255, 0.72);
   --surface-solid: #ffffff;
-  --surface-2: #f6f0e8;
-  --text: #1c1410;
-  --text-muted: #7a6f63;
-  --text-faint: #a89c8d;
-  --border: rgba(28, 20, 16, 0.08);
+  --surface-2: #f4f4f5;
+  --text: #18181b;
+  --text-muted: #71717a;
+  --text-faint: #a1a1aa;
+  --border: rgba(24, 24, 27, 0.08);
   --primary-1: #f59e0b;
   --primary-2: #c2410c;
   --primary-contrast: #ffffff;
@@ -19,9 +19,9 @@
   --mid-2: #f97316;
   --low-1: #fb7185;
   --low-2: #f43f5e;
-  --shadow-sm: 0 1px 2px rgba(40, 25, 10, 0.05);
-  --shadow-md: 0 8px 24px -8px rgba(120, 53, 15, 0.18);
-  --shadow-lg: 0 20px 48px -12px rgba(120, 53, 15, 0.26);
+  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05);
+  --shadow-md: 0 8px 24px -8px rgba(24, 24, 27, 0.16);
+  --shadow-lg: 0 20px 48px -12px rgba(24, 24, 27, 0.22);
   --radius: 20px;
   --radius-sm: 14px;
   color-scheme: light;
@@ -33,15 +33,15 @@
     --bg-glow-1: #9a3412;
     --bg-glow-2: #9f1239;
     --surface: rgba(255, 255, 255, 0.06);
-    --surface-solid: #1c1712;
+    --surface-solid: #18181b;
     --surface-2: rgba(255, 255, 255, 0.05);
-    --text: #f7f3ee;
-    --text-muted: #ab9f92;
-    --text-faint: #756b60;
+    --text: #f4f4f5;
+    --text-muted: #a1a1aa;
+    --text-faint: #71717a;
     --border: rgba(255, 255, 255, 0.09);
     --primary-1: #fb923c;
     --primary-2: #f97316;
-    --primary-contrast: #1c1712;
+    --primary-contrast: #18181b;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 8px 28px -8px rgba(0, 0, 0, 0.55);
     --shadow-lg: 0 24px 56px -16px rgba(0, 0, 0, 0.65);
@@ -901,6 +901,11 @@ body {
   overflow-y: auto;
   box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.25);
   animation: slideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.sheet.dragging {
+  transition: none;
 }
 
 .sheet-handle {
@@ -1227,6 +1232,58 @@ body {
 @keyframes popIn {
   from { opacity: 0; transform: translate(-50%, -50%) scale(0.94); }
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* ---- Symulator nadpłaty ---- */
+
+.simulator-open-btn {
+  width: 100%;
+  margin-top: 8px;
+  margin-bottom: 6px;
+}
+
+.simulator-dialog { width: min(380px, calc(100vw - 40px)); }
+
+.simulator-loan-name {
+  margin: -8px 0 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.simulator-results {
+  background: var(--surface-2);
+  border-radius: 14px;
+  padding: 14px;
+  margin: 4px 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.simulator-result-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+}
+
+.simulator-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.simulator-dot-base { background: var(--text-faint); }
+.simulator-dot-fast { background: var(--good-1); }
+
+.simulator-highlight {
+  margin: 4px 0 0;
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--good-1);
+}
+
+.simulator-disclaimer {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0 0 4px;
 }
 
 /* ---- Settings ---- */

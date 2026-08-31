@@ -15,7 +15,7 @@
 <meta name="apple-mobile-web-app-title" content="Kredyty" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 
-<link rel="stylesheet" href="style.css?v=0.6.0" />
+<link rel="stylesheet" href="style.css?v=0.7.0" />
 </head>
 <body>
 
@@ -221,9 +221,24 @@
         <input type="number" id="f_monthly" min="0" step="0.01" inputmode="decimal" />
       </label>
       <label class="field">
-        <span>Oprocentowanie (%)</span>
+        <span>Oprocentowanie nominalne (%)</span>
         <input type="number" id="f_rate" min="0" step="0.01" inputmode="decimal" />
+        <small class="field-hint">Czyste oprocentowanie z umowy, nie RRSO (RRSO wlicza prowizje i zawyży symulacje).</small>
       </label>
+    </div>
+
+    <div class="field">
+      <span>Typ rat</span>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="installmentType" value="equal" checked />
+          <span>Równe (annuitetowe)</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="installmentType" value="declining" />
+          <span>Malejące</span>
+        </label>
+      </div>
     </div>
 
     <div class="field">
@@ -341,6 +356,7 @@
     <button type="button" id="detailPayBtn" class="btn-primary">Opłać ratę</button>
     <button type="button" id="detailOverpayBtn" class="btn-secondary">Nadpłać</button>
   </div>
+  <button type="button" id="detailSimulatorBtn" class="btn-secondary simulator-open-btn" hidden>🧮 Symuluj nadpłatę miesięczną</button>
 
   <h3 class="sheet-section">Historia spłat</h3>
   <div id="historyList" class="history-list"></div>
@@ -366,6 +382,38 @@
   <div class="dialog-actions">
     <button type="button" id="amountDialogCancel" class="btn-secondary">Anuluj</button>
     <button type="button" id="amountDialogConfirm" class="btn-primary">Potwierdź</button>
+  </div>
+</div>
+
+<!-- Symulator nadpłaty cyklicznej -->
+<div id="simulatorBackdrop" class="dialog-backdrop" hidden></div>
+<div id="simulatorDialog" class="dialog simulator-dialog" hidden>
+  <h3>Symulacja nadpłaty</h3>
+  <p class="simulator-loan-name" id="simulatorLoanName"></p>
+
+  <label class="field">
+    <span>Dodatkowa wpłata co miesiąc (zł)</span>
+    <input type="number" id="simulatorExtraInput" min="0" step="10" inputmode="decimal" value="0" />
+  </label>
+
+  <div class="simulator-results" id="simulatorResults">
+    <div class="simulator-result-row">
+      <span class="simulator-dot simulator-dot-base"></span>
+      <span>Bez nadpłat: <strong id="simulatorBaseDate">—</strong></span>
+    </div>
+    <div class="simulator-result-row">
+      <span class="simulator-dot simulator-dot-fast"></span>
+      <span>Z nadpłatą: <strong id="simulatorFastDate">—</strong></span>
+    </div>
+    <p class="simulator-highlight" id="simulatorSavings">Wpisz kwotę nadpłaty powyżej.</p>
+  </div>
+
+  <p class="simulator-disclaimer" id="simulatorDisclaimer">
+    Szacunek na podstawie standardowej amortyzacji (raty <span id="simulatorTypeLabel">równe</span>, oprocentowanie nominalne). Realny harmonogram banku może się nieznacznie różnić.
+  </p>
+
+  <div class="dialog-actions">
+    <button type="button" id="simulatorCloseBtn" class="btn-primary">Zamknij</button>
   </div>
 </div>
 

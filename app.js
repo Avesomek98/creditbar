@@ -3,7 +3,7 @@
 
   // Bump this on every meaningful deploy so it's obvious from the footer
   // whether an iPhone actually picked up the update.
-  const APP_VERSION = "0.6.0";
+  const APP_VERSION = "0.7.0";
 
   const STORAGE_KEY = "creditbar:loans:v1";
   const SORT_KEY = "creditbar:sort:v1";
@@ -171,6 +171,39 @@
     return dates.reduce((max, d) => (d > max ? d : max));
   }
 
+  // Ile miesięcy zajmie spłacenie salda przy stałej dodatkowej wpłacie co
+  // miesiąc (extraMonthly, może być 0). Symulacja miesiąc-po-miesiącu, nie
+  // wzór zamknięty — łatwiej o poprawność przy dwóch typach rat i i=0.
+  // "Malejące" wymaga oryginalnej liczby rat (installmentsTotal), bo stała
+  // część kapitałowa = kwota początkowa / liczba rat — bez tego się nie da.
+  const SIMULATION_MAX_MONTHS = 720;
+
+  function simulateMonthsToPayoff(loan, extraMonthly) {
+    let balance = loan.remaining || 0;
+    if (balance <= 0) return 0;
+
+    const i = (loan.rate || 0) / 100 / 12;
+    const declining = loan.installmentType === "declining";
+    const fixedPrincipal = declining && loan.installmentsTotal > 0
+      ? (loan.total || 0) / loan.installmentsTotal
+      : null;
+
+    if (declining && fixedPrincipal == null) return null; // brak danych do symulacji
+
+    let months = 0;
+    while (balance > 0.005 && months < SIMULATION_MAX_MONTHS) {
+      const interest = balance * i;
+      const principalPortion = declining
+        ? fixedPrincipal + extraMonthly
+        : (loan.monthly || 0) + extraMonthly - interest;
+
+      if (principalPortion <= 0) return null; // rata nie starcza nawet na odsetki
+      balance -= principalPortion;
+      months++;
+    }
+    return balance > 0.005 ? null : months;
+  }
+
   // Highest-interest active loan — the debt-avalanche pick to pay off first.
   function ratePriorityLoan(list) {
     const withRate = list.filter((l) => !isPaidOff(l) && l.rate > 0);
@@ -217,6 +250,7 @@
       installmentsTotal: loan.installmentsTotal || 0,
       installmentsPaid: loan.installmentsPaid || 0,
       installmentsMode: ["manual", "auto", "bank"].includes(loan.installmentsMode) ? loan.installmentsMode : "manual",
+      installmentType: loan.installmentType === "declining" ? "declining" : "equal",
       nextDate: loan.nextDate || "",
       notes: loan.notes || "",
       history: Array.isArray(loan.history) ? loan.history : [],
@@ -271,6 +305,7 @@
       payoffEta: false,
       ratePriority: false,
       reminders: false,
+      overpaymentCalculator: false,
     },
     dashboard: {
       totalDebt: true,
@@ -310,6 +345,7 @@
     { key: "payoffEta", label: "Przewidywana data wyjścia z długów", desc: "Szacowana data spłaty wszystkich kredytów." },
     { key: "ratePriority", label: "Priorytet spłaty według oprocentowania", desc: "Podpowiada, który kredyt spłacać najpierw." },
     { key: "reminders", label: "Przypomnienia o ratach", desc: "Baner, gdy rata zbliża się w ciągu ustawionej liczby dni." },
+    { key: "overpaymentCalculator", label: "Symulator nadpłaty", desc: "O ile szybciej skończysz spłacać przy stałej nadpłacie miesięcznej." },
   ];
 
   const DASHBOARD_DEFS = [
@@ -455,6 +491,18 @@
     installmentsAutoHint: document.getElementById("installmentsAutoHint"),
     settingsTabs: document.getElementById("settingsTabs"),
     bgSwatches: document.getElementById("bgSwatches"),
+    detailSimulatorBtn: document.getElementById("detailSimulatorBtn"),
+    simulatorBackdrop: document.getElementById("simulatorBackdrop"),
+    simulatorDialog: document.getElementById("simulatorDialog"),
+    simulatorLoanName: document.getElementById("simulatorLoanName"),
+    simulatorExtraInput: document.getElementById("simulatorExtraInput"),
+    simulatorResults: document.getElementById("simulatorResults"),
+    simulatorBaseDate: document.getElementById("simulatorBaseDate"),
+    simulatorFastDate: document.getElementById("simulatorFastDate"),
+    simulatorSavings: document.getElementById("simulatorSavings"),
+    simulatorDisclaimer: document.getElementById("simulatorDisclaimer"),
+    simulatorTypeLabel: document.getElementById("simulatorTypeLabel"),
+    simulatorCloseBtn: document.getElementById("simulatorCloseBtn"),
   };
 
   el.appVersion.textContent = `v${APP_VERSION}`;
@@ -555,6 +603,64 @@
       confirmLabel: "Nadpłać",
       onConfirm: (amount) => overpayLoan(id, amount),
     });
+  }
+
+  // ---- Symulator nadpłaty cyklicznej (co jeśli płacę X zł więcej co miesiąc) ----
+
+  let simulatorLoanId = null;
+
+  function openSimulator(id) {
+    const loan = loans.find((l) => l.id === id);
+    if (!loan) return;
+    simulatorLoanId = id;
+    el.simulatorLoanName.textContent = `${loan.name || loan.bank} — ${loan.bank}`;
+    el.simulatorTypeLabel.textContent = loan.installmentType === "declining" ? "malejące" : "równe";
+    el.simulatorExtraInput.value = "0";
+    updateSimulatorResults();
+    el.simulatorBackdrop.hidden = false;
+    el.simulatorDialog.hidden = false;
+  }
+
+  function closeSimulator() {
+    el.simulatorBackdrop.hidden = true;
+    el.simulatorDialog.hidden = true;
+    simulatorLoanId = null;
+  }
+
+  function updateSimulatorResults() {
+    const loan = loans.find((l) => l.id === simulatorLoanId);
+    if (!loan) return;
+
+    const extra = Math.max(0, parseFloat(el.simulatorExtraInput.value) || 0);
+    const baseMonths = simulateMonthsToPayoff(loan, 0);
+    const fastMonths = simulateMonthsToPayoff(loan, extra);
+
+    if (baseMonths == null) {
+      el.simulatorBaseDate.textContent = "—";
+      el.simulatorFastDate.textContent = "—";
+      el.simulatorSavings.textContent = "Za mało danych do symulacji (sprawdź ratę, oprocentowanie i typ rat).";
+      return;
+    }
+
+    const base = loan.nextDate || todayStr();
+    const baseDate = addMonths(base, Math.max(0, baseMonths - 1));
+    el.simulatorBaseDate.textContent = dateFmt.format(new Date(baseDate));
+
+    if (extra <= 0 || fastMonths == null) {
+      el.simulatorFastDate.textContent = "—";
+      el.simulatorSavings.textContent = extra <= 0
+        ? "Wpisz kwotę nadpłaty powyżej."
+        : "Przy tej kwocie nie da się wiarygodnie policzyć (za mało danych).";
+      return;
+    }
+
+    const fastDate = addMonths(base, Math.max(0, fastMonths - 1));
+    el.simulatorFastDate.textContent = dateFmt.format(new Date(fastDate));
+
+    const diff = baseMonths - fastMonths;
+    el.simulatorSavings.textContent = diff > 0
+      ? `O ${diff} ${diff === 1 ? "miesiąc" : diff < 5 ? "miesiące" : "miesięcy"} szybciej`
+      : "Ta nadpłata nie skraca jeszcze okresu spłaty.";
   }
 
   // ---- Amount dialog (shared by "Opłać ratę" and "Nadpłać") ----
@@ -910,7 +1016,7 @@
 
     const metaParts = [`Spłacono: ${currency.format(paidAmount(loan))}`];
     if (loan.monthly) metaParts.push(`${currency.format(loan.monthly)}/mies.`);
-    if (loan.rate) metaParts.push(`${loan.rate}% RRSO`);
+    if (loan.rate) metaParts.push(`${loan.rate}% oprocentowania`);
     if (loan.nextDate) metaParts.push(`kolejna rata: ${dateFmt.format(new Date(loan.nextDate))}`);
     card.querySelector(".card-meta").textContent = metaParts.join(" · ");
 
@@ -1005,6 +1111,7 @@
 
     el.detailPayBtn.hidden = paidOff || !settings.features.payInstallment;
     el.detailOverpayBtn.hidden = paidOff || !settings.features.overpayment;
+    el.detailSimulatorBtn.hidden = paidOff || !settings.features.overpaymentCalculator || !(loan.monthly > 0);
 
     const showHistory = settings.features.history;
     el.detailSheet.querySelector(".sheet-section").hidden = !showHistory;
@@ -1031,6 +1138,15 @@
     return el.form.querySelector('input[name="installmentsMode"]:checked')?.value || "manual";
   }
 
+  function setInstallmentType(type) {
+    const radio = el.form.querySelector(`input[name="installmentType"][value="${type}"]`);
+    if (radio) radio.checked = true;
+  }
+
+  function getInstallmentType() {
+    return el.form.querySelector('input[name="installmentType"]:checked')?.value || "equal";
+  }
+
   // "Oblicz automatycznie" to tylko kwota ÷ rata — grube przybliżenie, bo
   // prawdziwy kredyt bankowy nalicza odsetki i rzadko wychodzi tak równo.
   // Dlatego to jedna z trzech jawnie nazwanych opcji, nie cichy domysł:
@@ -1053,6 +1169,7 @@
     el.deleteBtn.hidden = true;
     el.form.reset();
     setInstallmentsMode("manual");
+    setInstallmentType("equal");
     updateInstallmentsModeUI();
     openGenericSheet(el.sheet);
   }
@@ -1075,6 +1192,7 @@
     el.f_nextDate.value = loan.nextDate || "";
     el.f_notes.value = loan.notes || "";
     setInstallmentsMode(loan.installmentsMode || "manual");
+    setInstallmentType(loan.installmentType || "equal");
     updateInstallmentsModeUI();
 
     openGenericSheet(el.sheet);
@@ -1117,6 +1235,7 @@
       installmentsTotal: parseInt(el.f_installmentsTotal.value, 10) || 0,
       installmentsPaid: parseInt(el.f_installmentsPaid.value, 10) || 0,
       installmentsMode: getInstallmentsMode(),
+      installmentType: getInstallmentType(),
       nextDate: el.f_nextDate.value || "",
       notes: el.f_notes.value.trim(),
       history: existing ? existing.history : [],
@@ -1192,6 +1311,11 @@
   });
   el.detailPayBtn.addEventListener("click", () => promptPayInstallment(currentDetailId));
   el.detailOverpayBtn.addEventListener("click", () => promptOverpay(currentDetailId));
+  el.detailSimulatorBtn.addEventListener("click", () => openSimulator(currentDetailId));
+
+  el.simulatorCloseBtn.addEventListener("click", closeSimulator);
+  el.simulatorBackdrop.addEventListener("click", closeSimulator);
+  el.simulatorExtraInput.addEventListener("input", updateSimulatorResults);
 
   el.amountDialogCancel.addEventListener("click", closeAmountDialog);
   el.amountDialogBackdrop.addEventListener("click", closeAmountDialog);
@@ -1262,6 +1386,45 @@
   // opcje trzeba zaimplementować samodzielnie.
 
   el.refreshBtn.addEventListener("click", forceRefreshApp);
+
+  // ---- Zamykanie arkuszy przeciągnięciem uchwytu w dół (jak natywne sheety iOS) ----
+
+  function makeSheetSwipeable(sheetEl, closeFn) {
+    const handle = sheetEl.querySelector(".sheet-handle");
+    if (!handle) return;
+
+    const DISMISS_THRESHOLD = 110;
+    let startY = null;
+    let dragging = false;
+
+    handle.addEventListener("touchstart", (e) => {
+      startY = e.touches[0].clientY;
+      dragging = true;
+      sheetEl.classList.add("dragging");
+    }, { passive: true });
+
+    handle.addEventListener("touchmove", (e) => {
+      if (!dragging || startY == null) return;
+      const delta = e.touches[0].clientY - startY;
+      if (delta <= 0) return;
+      sheetEl.style.transform = `translateY(${delta}px)`;
+    }, { passive: true });
+
+    handle.addEventListener("touchend", (e) => {
+      if (!dragging) return;
+      dragging = false;
+      sheetEl.classList.remove("dragging");
+      const endY = e.changedTouches[0]?.clientY ?? startY;
+      const delta = endY - startY;
+      sheetEl.style.transform = "";
+      if (delta > DISMISS_THRESHOLD) closeFn();
+      startY = null;
+    });
+  }
+
+  makeSheetSwipeable(el.sheet, closeSheet);
+  makeSheetSwipeable(el.detailSheet, closeDetail);
+  makeSheetSwipeable(el.settingsSheet, closeSettings);
 
   (function setupPullToRefresh() {
     const indicator = el.pullIndicator;
