@@ -1,4 +1,5 @@
 // Generuje ikony PWA (PNG) bez zewnętrznych zależności — używa tylko wbudowanego modułu zlib.
+// Motyw: bursztyn -> pomarańcz, glif = pierścień postępu (spójny z pierścieniem w aplikacji).
 import { deflateSync } from "node:zlib";
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -7,8 +8,14 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const outDir = join(__dirname, "..", "icons");
 
-const BG = [79, 70, 229, 255]; // #4F46E5 (indigo)
-const FG = [255, 255, 255, 255]; // biały
+const BG1 = [245, 158, 11]; // #f59e0b amber-500
+const BG2 = [194, 65, 12]; // #c2410c orange-700
+const FG = [255, 255, 255, 255];
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function lerpColor(c1, c2, t) {
+  return [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t), 255];
+}
 
 function inRoundedRect(px, py, w, h, r) {
   const cx = px + 0.5, cy = py + 0.5;
@@ -21,50 +28,52 @@ function inRoundedRect(px, py, w, h, r) {
   return dx * dx + dy * dy <= r * r;
 }
 
-function drawIcon(size, { padding = 0, cornerRatio = 0.22 } = {}) {
+function drawIcon(size, { padding = 0, cornerRatio = 0.24, progress = 0.72 } = {}) {
   const buf = new Uint8Array(size * size * 4);
   const contentSize = size - padding * 2;
   const r = contentSize * cornerRatio;
+  const cx = size / 2, cy = size / 2;
+  const ringR = contentSize * 0.31;
+  const strokeW = contentSize * 0.155;
+  const sweep = Math.PI * 2 * progress;
+  const capR = strokeW / 2;
+  const startCap = [cx + ringR * Math.sin(0), cy - ringR * Math.cos(0)];
+  const endCap = [cx + ringR * Math.sin(sweep), cy - ringR * Math.cos(sweep)];
 
-  // tło: zaokrąglony kwadrat
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const idx = (y * size + x) * 4;
       const lx = x - padding, ly = y - padding;
       const inside = lx >= 0 && ly >= 0 && lx < contentSize && ly < contentSize &&
         inRoundedRect(lx, ly, contentSize, contentSize, r);
-      const c = inside ? BG : [0, 0, 0, 0];
-      buf[idx] = c[0]; buf[idx + 1] = c[1]; buf[idx + 2] = c[2]; buf[idx + 3] = c[3];
-    }
-  }
 
-  // 3 słupki rosnącego "postępu spłaty" na środku ikony
-  const barCount = 3;
-  const barHeights = [0.34, 0.56, 0.78]; // proporcje wysokości kontentu
-  const barWidthRatio = 0.13;
-  const gapRatio = 0.07;
-  const totalBarsWidth = barCount * barWidthRatio + (barCount - 1) * gapRatio;
-  const startXRatio = (1 - totalBarsWidth) / 2;
-  const baseYRatio = 0.74; // linia podstawy słupków
-  const barCornerRatio = 0.35;
-
-  for (let i = 0; i < barCount; i++) {
-    const bx = padding + (startXRatio + i * (barWidthRatio + gapRatio)) * contentSize;
-    const bw = barWidthRatio * contentSize;
-    const bh = barHeights[i] * contentSize * 0.5;
-    const baseY = padding + baseYRatio * contentSize;
-    const by = baseY - bh;
-    const br = bw * barCornerRatio;
-
-    for (let y = Math.floor(by); y < Math.ceil(baseY); y++) {
-      for (let x = Math.floor(bx); x < Math.ceil(bx + bw); x++) {
-        if (x < 0 || y < 0 || x >= size || y >= size) continue;
-        const lx = x - bx, ly = y - by;
-        if (inRoundedRect(lx, ly, bw, bh, br)) {
-          const idx = (y * size + x) * 4;
-          buf[idx] = FG[0]; buf[idx + 1] = FG[1]; buf[idx + 2] = FG[2]; buf[idx + 3] = FG[3];
-        }
+      if (!inside) {
+        buf[idx] = 0; buf[idx + 1] = 0; buf[idx + 2] = 0; buf[idx + 3] = 0;
+        continue;
       }
+
+      const t = (x + y) / (2 * size);
+      const bg = lerpColor(BG1, BG2, Math.min(1, Math.max(0, t)));
+      let color = bg;
+
+      const px = x + 0.5, py = y + 0.5;
+      const dx = px - cx, dy = py - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      let angle = Math.atan2(dx, -dy);
+      if (angle < 0) angle += Math.PI * 2;
+
+      const inTrackBand = Math.abs(dist - ringR) <= strokeW / 2;
+      const inProgressBand = inTrackBand && angle <= sweep;
+      const inStartCap = Math.hypot(px - startCap[0], py - startCap[1]) <= capR;
+      const inEndCap = Math.hypot(px - endCap[0], py - endCap[1]) <= capR;
+
+      if (inProgressBand || inStartCap || inEndCap) {
+        color = FG;
+      } else if (inTrackBand) {
+        color = lerpColor(bg, FG, 0.32);
+      }
+
+      buf[idx] = color[0]; buf[idx + 1] = color[1]; buf[idx + 2] = color[2]; buf[idx + 3] = 255;
     }
   }
 
@@ -99,8 +108,7 @@ function encodePNG(rgbaBuf, size) {
   const raw = Buffer.alloc(size * (1 + size * 4));
   for (let y = 0; y < size; y++) {
     const rowStart = y * (1 + size * 4);
-    raw[rowStart] = 0; // filter: None
-    rgbaBuf.subarray ? null : null;
+    raw[rowStart] = 0;
     for (let x = 0; x < size * 4; x++) {
       raw[rowStart + 1 + x] = rgbaBuf[y * size * 4 + x];
     }
@@ -110,8 +118,8 @@ function encodePNG(rgbaBuf, size) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; // bit depth
-  ihdr[9] = 6; // color type RGBA
+  ihdr[8] = 8;
+  ihdr[9] = 6;
   ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
 
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -130,7 +138,7 @@ function makeIcon(size, opts, filename) {
   console.log(`OK ${filename} (${size}x${size}, ${png.length} B)`);
 }
 
-makeIcon(192, { padding: 0, cornerRatio: 0.22 }, "icon-192.png");
-makeIcon(512, { padding: 0, cornerRatio: 0.22 }, "icon-512.png");
+makeIcon(192, { padding: 0, cornerRatio: 0.24 }, "icon-192.png");
+makeIcon(512, { padding: 0, cornerRatio: 0.24 }, "icon-512.png");
 makeIcon(512, { padding: 90, cornerRatio: 0 }, "icon-maskable-512.png");
-makeIcon(180, { padding: 0, cornerRatio: 0.22 }, "apple-touch-icon.png");
+makeIcon(180, { padding: 0, cornerRatio: 0.24 }, "apple-touch-icon.png");

@@ -6,7 +6,7 @@
 <title>Moje Kredyty</title>
 
 <link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#4f46e5" />
+<meta name="theme-color" content="#f59e0b" />
 <link rel="icon" href="icons/icon-192.png" />
 
 <!-- iOS: instalacja jako PWA -->
@@ -53,6 +53,10 @@
       </div>
       <div class="hero-stat-row">
         <div class="hero-stat-chip">
+          <span id="sumPaid">—</span>
+          <small>spłacono</small>
+        </div>
+        <div class="hero-stat-chip">
           <span id="sumMonthly">—</span>
           <small>rata / mies.</small>
         </div>
@@ -64,8 +68,27 @@
     </div>
   </section>
 
+  <div class="insights" id="insights" hidden>
+    <div class="insight-card">
+      <span class="insight-label">Najbliższa rata</span>
+      <span class="insight-value" id="insightNextPayment">—</span>
+    </div>
+    <div class="insight-card">
+      <span class="insight-label">Najbliżej spłaty</span>
+      <span class="insight-value" id="insightMostAdvanced">—</span>
+    </div>
+  </div>
+
   <div class="list-heading" id="listHeading" hidden>
     <h2>Twoje kredyty</h2>
+    <select id="sortSelect" class="sort-select" aria-label="Sortuj kredyty">
+      <option value="nextDate">Najbliższa rata</option>
+      <option value="debtDesc">Największe zadłużenie</option>
+      <option value="debtAsc">Najmniejsze zadłużenie</option>
+      <option value="progressDesc">Największy postęp</option>
+      <option value="progressAsc">Najmniejszy postęp</option>
+      <option value="bank">Nazwa banku</option>
+    </select>
   </div>
 
   <main id="list" class="list"></main>
@@ -82,6 +105,14 @@
     <p class="empty-sub">Dodaj pierwszy kredyt lub pożyczkę, żeby zacząć śledzić spłatę.</p>
     <button id="emptyAddBtn" class="btn-primary">+ Dodaj pierwszy kredyt</button>
   </div>
+
+  <footer class="app-footer">
+    <span class="app-footer-brand">Moje Kredyty</span>
+    <span class="app-footer-dot">·</span>
+    <span>Stworzone przez Avesomek98</span>
+    <span class="app-footer-dot">·</span>
+    <span>© 2026</span>
+  </footer>
 </div>
 
 <button id="fab" class="fab" aria-label="Dodaj kredyt">+</button>
@@ -96,7 +127,24 @@
     <h3 class="sheet-section">Podstawowe informacje</h3>
     <label class="field">
       <span>Bank *</span>
-      <input type="text" id="f_bank" required placeholder="np. mBank" />
+      <input type="text" id="f_bank" required placeholder="np. mBank" list="bankList" autocomplete="off" />
+      <datalist id="bankList">
+        <option value="PKO BP"></option>
+        <option value="mBank"></option>
+        <option value="ING"></option>
+        <option value="Santander"></option>
+        <option value="Bank Millennium"></option>
+        <option value="Alior Bank"></option>
+        <option value="Credit Agricole"></option>
+        <option value="BNP Paribas"></option>
+        <option value="Bank Pekao"></option>
+        <option value="Citi Handlowy"></option>
+        <option value="Raiffeisen"></option>
+        <option value="Nest Bank"></option>
+        <option value="VeloBank"></option>
+        <option value="BOŚ"></option>
+        <option value="Toyota Bank"></option>
+      </datalist>
     </label>
 
     <label class="field">
@@ -159,6 +207,111 @@
   </form>
 </div>
 
+<!-- Szczegóły kredytu -->
+<div id="detailSheet" class="sheet detail-sheet" hidden>
+  <div class="sheet-handle"></div>
+
+  <div class="detail-header">
+    <div class="bank-avatar" id="detailAvatar"></div>
+    <div class="detail-titles">
+      <span class="detail-name" id="detailName"></span>
+      <span class="detail-bank" id="detailBank"></span>
+    </div>
+    <span class="card-status-badge" id="detailPaidBadge" hidden>✓ Spłacony</span>
+  </div>
+
+  <div class="progress-track">
+    <div class="progress-fill" id="detailProgressFill"></div>
+  </div>
+  <div class="detail-pct-row">
+    <span id="detailPct">0%</span>
+    <span class="detail-pct-label">spłacono</span>
+  </div>
+
+  <div class="detail-stats">
+    <div class="detail-stat">
+      <span class="detail-stat-label">Kwota początkowa</span>
+      <span class="detail-stat-value" id="detailTotal">—</span>
+    </div>
+    <div class="detail-stat">
+      <span class="detail-stat-label">Spłacono</span>
+      <span class="detail-stat-value" id="detailPaid">—</span>
+    </div>
+    <div class="detail-stat">
+      <span class="detail-stat-label">Pozostało</span>
+      <span class="detail-stat-value" id="detailRemaining">—</span>
+    </div>
+    <div class="detail-stat">
+      <span class="detail-stat-label">Rata miesięczna</span>
+      <span class="detail-stat-value" id="detailMonthly">—</span>
+    </div>
+    <div class="detail-stat">
+      <span class="detail-stat-label">Rat łącznie</span>
+      <span class="detail-stat-value" id="detailInstallmentsTotal">—</span>
+    </div>
+    <div class="detail-stat">
+      <span class="detail-stat-label">Rat pozostało</span>
+      <span class="detail-stat-value" id="detailInstallmentsLeft">—</span>
+    </div>
+    <div class="detail-stat">
+      <span class="detail-stat-label">Oprocentowanie</span>
+      <span class="detail-stat-value" id="detailRate">—</span>
+    </div>
+    <div class="detail-stat">
+      <span class="detail-stat-label">Kolejna rata</span>
+      <span class="detail-stat-value" id="detailNextDate">—</span>
+    </div>
+    <div class="detail-stat detail-stat-wide">
+      <span class="detail-stat-label">Przewidywana spłata</span>
+      <span class="detail-stat-value" id="detailPayoffDate">—</span>
+    </div>
+  </div>
+
+  <div class="detail-actions">
+    <button type="button" id="detailPayBtn" class="btn-primary">Opłać ratę</button>
+    <button type="button" id="detailOverpayBtn" class="btn-secondary">Nadpłać</button>
+  </div>
+
+  <h3 class="sheet-section">Historia spłat</h3>
+  <div id="historyList" class="history-list"></div>
+  <p id="historyEmpty" class="history-empty" hidden>Brak zapisanych spłat.</p>
+
+  <div class="sheet-actions detail-footer">
+    <button type="button" id="detailDeleteBtn" class="btn-danger">Usuń kredyt</button>
+    <div class="sheet-actions-right">
+      <button type="button" id="detailCloseBtn" class="btn-secondary">Zamknij</button>
+      <button type="button" id="detailEditBtn" class="btn-primary">Edytuj</button>
+    </div>
+  </div>
+</div>
+
+<!-- Dialog kwoty: Opłać ratę / Nadpłać -->
+<div id="amountDialogBackdrop" class="dialog-backdrop" hidden></div>
+<div id="amountDialog" class="dialog" hidden>
+  <h3 id="amountDialogTitle">Opłać ratę</h3>
+  <label class="field">
+    <span id="amountDialogLabel">Kwota</span>
+    <input type="number" id="amountDialogInput" min="0" step="0.01" inputmode="decimal" />
+  </label>
+  <div class="dialog-actions">
+    <button type="button" id="amountDialogCancel" class="btn-secondary">Anuluj</button>
+    <button type="button" id="amountDialogConfirm" class="btn-primary">Potwierdź</button>
+  </div>
+</div>
+
+<template id="historyItemTemplate">
+  <div class="history-item">
+    <div class="history-item-main">
+      <span class="history-date"></span>
+      <span class="history-type"></span>
+    </div>
+    <div class="history-item-amounts">
+      <span class="history-amount"></span>
+      <span class="history-balance"></span>
+    </div>
+  </div>
+</template>
+
 <template id="loanCardTemplate">
   <article class="card">
     <div class="card-top">
@@ -170,6 +323,7 @@
         </div>
       </div>
       <div class="card-pct-wrap">
+        <span class="card-status-badge" hidden>✓ Spłacony</span>
         <span class="card-pct"></span>
         <svg class="card-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
@@ -185,8 +339,17 @@
       <span class="card-installments"></span>
     </div>
     <div class="card-meta"></div>
+    <button type="button" class="pay-btn">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Zapłać ratę
+    </button>
   </article>
 </template>
+
+<div id="toast" class="toast" hidden>
+  <span id="toastMsg"></span>
+  <button type="button" id="toastUndo">Cofnij</button>
+</div>
 
 <script src="app.js"></script>
 </body>
