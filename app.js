@@ -3,7 +3,7 @@
 
   // Bump this on every meaningful deploy so it's obvious from the footer
   // whether an iPhone actually picked up the update.
-  const APP_VERSION = "0.5.1";
+  const APP_VERSION = "0.6.0";
 
   const STORAGE_KEY = "creditbar:loans:v1";
   const SORT_KEY = "creditbar:sort:v1";
@@ -216,6 +216,7 @@
       rate: loan.rate || 0,
       installmentsTotal: loan.installmentsTotal || 0,
       installmentsPaid: loan.installmentsPaid || 0,
+      installmentsMode: ["manual", "auto", "bank"].includes(loan.installmentsMode) ? loan.installmentsMode : "manual",
       nextDate: loan.nextDate || "",
       notes: loan.notes || "",
       history: Array.isArray(loan.history) ? loan.history : [],
@@ -255,6 +256,9 @@
   const SETTINGS_KEY = "creditbar:settings:v1";
 
   const DEFAULT_SETTINGS = {
+    theme: "amber",
+    bg: "cream",
+    reminderDays: 7,
     features: {
       summary: true,
       totalProgress: true,
@@ -267,7 +271,6 @@
       payoffEta: false,
       ratePriority: false,
       reminders: false,
-      autoInstallments: false,
     },
     dashboard: {
       totalDebt: true,
@@ -275,9 +278,25 @@
       totalMonthly: true,
       loanCount: true,
       nextPayment: true,
+      mostAdvanced: true,
       loanCards: true,
     },
   };
+
+  const THEME_DEFS = [
+    { key: "amber", label: "Bursztyn", c1: "#f59e0b", c2: "#c2410c" },
+    { key: "emerald", label: "Szmaragd", c1: "#10b981", c2: "#047857" },
+    { key: "violet", label: "Ametyst", c1: "#8b5cf6", c2: "#6d28d9" },
+    { key: "rose", label: "Róż", c1: "#f43f5e", c2: "#be123c" },
+    { key: "blue", label: "Błękit", c1: "#3b82f6", c2: "#1d4ed8" },
+  ];
+
+  const BG_DEFS = [
+    { key: "cream", label: "Kremowe", c1: "#fed7aa", c2: "#faf5ef", c3: "#fecdd3" },
+    { key: "mist", label: "Mgła", c1: "#e0e7ff", c2: "#f4f5f7", c3: "#fbcfe8" },
+    { key: "sage", label: "Szałwia", c1: "#bbf7d0", c2: "#f4f7f2", c3: "#fef08a" },
+    { key: "contrast", label: "Kontrast", c1: "#f1f5f9", c2: "#ffffff", c3: "#f1f5f9" },
+  ];
 
   const FEATURE_DEFS = [
     { key: "summary", label: "Podsumowanie wszystkich kredytów", desc: "Karta z sumą zadłużenia na górze ekranu." },
@@ -290,8 +309,7 @@
     { key: "calendar", label: "Kalendarz rat", desc: "Lista najbliższych terminów płatności." },
     { key: "payoffEta", label: "Przewidywana data wyjścia z długów", desc: "Szacowana data spłaty wszystkich kredytów." },
     { key: "ratePriority", label: "Priorytet spłaty według oprocentowania", desc: "Podpowiada, który kredyt spłacać najpierw." },
-    { key: "reminders", label: "Przypomnienia o ratach", desc: "Baner, gdy rata zbliża się w ciągu 7 dni." },
-    { key: "autoInstallments", label: "Automatycznie obliczaj liczbę rat", desc: "Na podstawie kwoty i raty — możesz i tak nadpisać ręcznie." },
+    { key: "reminders", label: "Przypomnienia o ratach", desc: "Baner, gdy rata zbliża się w ciągu ustawionej liczby dni." },
   ];
 
   const DASHBOARD_DEFS = [
@@ -300,6 +318,7 @@
     { key: "totalMonthly", label: "Łączna miesięczna rata", desc: "" },
     { key: "loanCount", label: "Liczba kredytów", desc: "" },
     { key: "nextPayment", label: "Najbliższa rata", desc: "" },
+    { key: "mostAdvanced", label: "Najbliżej spłaty", desc: "" },
     { key: "loanCards", label: "Karty kredytów", desc: "Lista kredytów poniżej podsumowania." },
   ];
 
@@ -309,6 +328,9 @@
       if (!raw) return structuredClone(DEFAULT_SETTINGS);
       const parsed = JSON.parse(raw);
       return {
+        theme: parsed.theme || DEFAULT_SETTINGS.theme,
+        bg: parsed.bg || DEFAULT_SETTINGS.bg,
+        reminderDays: parsed.reminderDays > 0 ? parsed.reminderDays : DEFAULT_SETTINGS.reminderDays,
         features: { ...DEFAULT_SETTINGS.features, ...parsed.features },
         dashboard: { ...DEFAULT_SETTINGS.dashboard, ...parsed.dashboard },
       };
@@ -423,6 +445,16 @@
     chipMonthly: document.getElementById("chipMonthly"),
     chipCount: document.getElementById("chipCount"),
     appVersion: document.getElementById("appVersion"),
+    refreshBtn: document.getElementById("refreshBtn"),
+    pullIndicator: document.getElementById("pullIndicator"),
+    themeSwatches: document.getElementById("themeSwatches"),
+    reminderDaysField: document.getElementById("reminderDaysField"),
+    reminderDaysInput: document.getElementById("reminderDaysInput"),
+    insightCardMostAdvanced: document.getElementById("insightCardMostAdvanced"),
+    deleteAllDataBtn: document.getElementById("deleteAllDataBtn"),
+    installmentsAutoHint: document.getElementById("installmentsAutoHint"),
+    settingsTabs: document.getElementById("settingsTabs"),
+    bgSwatches: document.getElementById("bgSwatches"),
   };
 
   el.appVersion.textContent = `v${APP_VERSION}`;
@@ -554,7 +586,7 @@
 
   // ---- Settings sheet ----
 
-  function buildToggleRows(container, defs, group) {
+  function buildToggleRows(container, defs, group, onChange) {
     container.innerHTML = "";
     for (const def of defs) {
       const node = el.toggleRowTemplate.content.cloneNode(true);
@@ -568,17 +600,85 @@
         settings[group][def.key] = input.checked;
         saveSettings();
         render();
+        if (onChange) onChange(def.key, input.checked);
       });
       container.appendChild(node);
     }
   }
 
+  function applyTheme() {
+    document.documentElement.setAttribute("data-accent", settings.theme);
+    document.documentElement.setAttribute("data-bg", settings.bg);
+  }
+
+  function renderThemeSwatches() {
+    el.themeSwatches.innerHTML = "";
+    for (const t of THEME_DEFS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "theme-swatch";
+      btn.style.background = `linear-gradient(135deg, ${t.c1}, ${t.c2})`;
+      btn.title = t.label;
+      btn.setAttribute("aria-label", t.label);
+      btn.classList.toggle("active", settings.theme === t.key);
+      btn.addEventListener("click", () => {
+        settings.theme = t.key;
+        saveSettings();
+        applyTheme();
+        renderThemeSwatches();
+      });
+      el.themeSwatches.appendChild(btn);
+    }
+  }
+
+  function renderBgSwatches() {
+    el.bgSwatches.innerHTML = "";
+    for (const b of BG_DEFS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "bg-swatch";
+      btn.style.background = `linear-gradient(135deg, ${b.c1}, ${b.c2} 55%, ${b.c3})`;
+      btn.setAttribute("aria-label", b.label);
+      btn.classList.toggle("active", settings.bg === b.key);
+
+      const label = document.createElement("span");
+      label.className = "bg-swatch-label";
+      label.textContent = b.label;
+      btn.appendChild(label);
+
+      btn.addEventListener("click", () => {
+        settings.bg = b.key;
+        saveSettings();
+        applyTheme();
+        renderBgSwatches();
+      });
+      el.bgSwatches.appendChild(btn);
+    }
+  }
+
+  function switchSettingsTab(tab) {
+    el.settingsTabs.querySelectorAll(".settings-tab").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === tab);
+    });
+    document.querySelectorAll(".settings-tab-panel").forEach((panel) => {
+      panel.hidden = panel.dataset.tabPanel !== tab;
+    });
+  }
+
   function renderSettingsSheet() {
-    buildToggleRows(el.featureToggles, FEATURE_DEFS, "features");
+    renderThemeSwatches();
+    renderBgSwatches();
+    buildToggleRows(el.featureToggles, FEATURE_DEFS, "features", (key, checked) => {
+      if (key === "reminders") el.reminderDaysField.hidden = !checked;
+    });
     buildToggleRows(el.dashboardToggles, DASHBOARD_DEFS, "dashboard");
+
+    el.reminderDaysField.hidden = !settings.features.reminders;
+    el.reminderDaysInput.value = String(settings.reminderDays);
   }
 
   function openSettings() {
+    switchSettingsTab("appearance");
     openGenericSheet(el.settingsSheet);
   }
 
@@ -590,13 +690,27 @@
     if (!confirm("Przywrócić domyślne ustawienia widoku i funkcji? Kredyty i historia spłat pozostaną bez zmian.")) return;
     settings = structuredClone(DEFAULT_SETTINGS);
     saveSettings();
+    applyTheme();
     renderSettingsSheet();
     render();
   }
 
-  // ---- Rendering ----
+  function deleteAllData() {
+    const count = loans.length;
+    if (count === 0) {
+      alert("Brak kredytów do usunięcia.");
+      return;
+    }
+    const noun = count === 1 ? "kredyt" : count < 5 ? "kredyty" : "kredytów";
+    const ok = confirm(`Usunąć WSZYSTKIE dane — ${count} ${noun} wraz z całą historią spłat? Tej operacji NIE da się cofnąć.`);
+    if (!ok) return;
+    loans = [];
+    saveLoans(loans);
+    closeSettings();
+    render();
+  }
 
-  const REMINDER_WINDOW_DAYS = 7;
+  // ---- Rendering ----
 
   function daysUntil(dateStr) {
     const target = new Date(`${dateStr}T00:00:00`);
@@ -639,9 +753,12 @@
         : "Brak zaplanowanych rat";
     }
 
-    el.insightMostAdvanced.textContent = agg.mostAdvancedLoan
-      ? `${agg.mostAdvancedLoan.bank} • ${Math.round(progressPct(agg.mostAdvancedLoan))}%`
-      : "—";
+    el.insightCardMostAdvanced.hidden = !d.mostAdvanced;
+    if (d.mostAdvanced) {
+      el.insightMostAdvanced.textContent = agg.mostAdvancedLoan
+        ? `${agg.mostAdvancedLoan.bank} • ${Math.round(progressPct(agg.mostAdvancedLoan))}%`
+        : "—";
+    }
 
     el.insightCardRatePriority.hidden = !f.ratePriority;
     if (f.ratePriority) {
@@ -660,7 +777,7 @@
       return;
     }
     const due = loans
-      .filter((l) => !isPaidOff(l) && l.nextDate && daysUntil(l.nextDate) <= REMINDER_WINDOW_DAYS)
+      .filter((l) => !isPaidOff(l) && l.nextDate && daysUntil(l.nextDate) <= settings.reminderDays)
       .sort((a, b) => (a.nextDate < b.nextDate ? -1 : 1));
 
     if (!due.length) {
@@ -788,7 +905,8 @@
     card.querySelector(".card-total").textContent = `z ${currency.format(loan.total)}`;
 
     const remLeft = remainingInstallments(loan);
-    card.querySelector(".card-installments").textContent = remLeft != null ? `Pozostało rat: ${remLeft}` : "";
+    const approx = loan.installmentsMode === "auto" ? "~" : "";
+    card.querySelector(".card-installments").textContent = remLeft != null ? `Pozostało rat: ${approx}${remLeft}` : "";
 
     const metaParts = [`Spłacono: ${currency.format(paidAmount(loan))}`];
     if (loan.monthly) metaParts.push(`${currency.format(loan.monthly)}/mies.`);
@@ -878,8 +996,9 @@
     el.detailPaid.textContent = currency.format(paidAmount(loan));
     el.detailRemaining.textContent = currency.format(loan.remaining || 0);
     el.detailMonthly.textContent = loan.monthly ? currency.format(loan.monthly) : "—";
-    el.detailInstallmentsTotal.textContent = loan.installmentsTotal ? String(loan.installmentsTotal) : "—";
-    el.detailInstallmentsLeft.textContent = remLeft != null ? String(remLeft) : "—";
+    const detailApprox = loan.installmentsMode === "auto" ? "~" : "";
+    el.detailInstallmentsTotal.textContent = loan.installmentsTotal ? `${detailApprox}${loan.installmentsTotal}` : "—";
+    el.detailInstallmentsLeft.textContent = remLeft != null ? `${detailApprox}${remLeft}` : "—";
     el.detailRate.textContent = loan.rate ? `${loan.rate}%` : "—";
     el.detailNextDate.textContent = loan.nextDate ? dateFmt.format(new Date(loan.nextDate)) : "—";
     el.detailPayoffDate.textContent = paidOff ? "Spłacono" : (payoff ? dateFmt.format(new Date(payoff)) : "—");
@@ -903,14 +1022,38 @@
 
   // ---- Add / edit sheet ----
 
-  let installmentsManuallyEdited = false;
+  function setInstallmentsMode(mode) {
+    const radio = el.form.querySelector(`input[name="installmentsMode"][value="${mode}"]`);
+    if (radio) radio.checked = true;
+  }
+
+  function getInstallmentsMode() {
+    return el.form.querySelector('input[name="installmentsMode"]:checked')?.value || "manual";
+  }
+
+  // "Oblicz automatycznie" to tylko kwota ÷ rata — grube przybliżenie, bo
+  // prawdziwy kredyt bankowy nalicza odsetki i rzadko wychodzi tak równo.
+  // Dlatego to jedna z trzech jawnie nazwanych opcji, nie cichy domysł:
+  // użytkownik zawsze wie, skąd wzięła się liczba rat na karcie.
+  function updateInstallmentsModeUI() {
+    const isAuto = getInstallmentsMode() === "auto";
+    el.f_installmentsTotal.readOnly = isAuto;
+    el.f_installmentsTotal.classList.toggle("is-computed", isAuto);
+    el.installmentsAutoHint.hidden = !isAuto;
+    if (isAuto) {
+      const total = parseFloat(el.f_total.value);
+      const monthly = parseFloat(el.f_monthly.value);
+      el.f_installmentsTotal.value = total > 0 && monthly > 0 ? String(Math.ceil(total / monthly)) : "";
+    }
+  }
 
   function openAdd() {
     editingId = null;
     el.sheetTitle.textContent = "Nowy kredyt";
     el.deleteBtn.hidden = true;
     el.form.reset();
-    installmentsManuallyEdited = false;
+    setInstallmentsMode("manual");
+    updateInstallmentsModeUI();
     openGenericSheet(el.sheet);
   }
 
@@ -931,20 +1074,10 @@
     el.f_installmentsPaid.value = loan.installmentsPaid ?? "";
     el.f_nextDate.value = loan.nextDate || "";
     el.f_notes.value = loan.notes || "";
-    installmentsManuallyEdited = loan.installmentsTotal > 0;
+    setInstallmentsMode(loan.installmentsMode || "manual");
+    updateInstallmentsModeUI();
 
     openGenericSheet(el.sheet);
-  }
-
-  // Ustawienia → "Automatycznie obliczaj liczbę rat": liczy total/monthly na
-  // bieżąco, ale przestaje nadpisywać pole, gdy użytkownik sam je zmieni.
-  function maybeAutoFillInstallments() {
-    if (!settings.features.autoInstallments || installmentsManuallyEdited) return;
-    const total = parseFloat(el.f_total.value);
-    const monthly = parseFloat(el.f_monthly.value);
-    if (total > 0 && monthly > 0) {
-      el.f_installmentsTotal.value = String(Math.ceil(total / monthly));
-    }
   }
 
   function closeSheet() {
@@ -983,6 +1116,7 @@
       rate: parseFloat(el.f_rate.value) || 0,
       installmentsTotal: parseInt(el.f_installmentsTotal.value, 10) || 0,
       installmentsPaid: parseInt(el.f_installmentsPaid.value, 10) || 0,
+      installmentsMode: getInstallmentsMode(),
       nextDate: el.f_nextDate.value || "",
       notes: el.f_notes.value.trim(),
       history: existing ? existing.history : [],
@@ -1029,12 +1163,25 @@
   el.settingsBtn.addEventListener("click", openSettings);
   el.settingsCloseBtn.addEventListener("click", closeSettings);
   el.resetSettingsBtn.addEventListener("click", resetSettings);
+  el.deleteAllDataBtn.addEventListener("click", deleteAllData);
 
-  el.f_total.addEventListener("input", maybeAutoFillInstallments);
-  el.f_monthly.addEventListener("input", maybeAutoFillInstallments);
-  el.f_installmentsTotal.addEventListener("input", () => {
-    installmentsManuallyEdited = true;
+  el.settingsTabs.querySelectorAll(".settings-tab").forEach((btn) => {
+    btn.addEventListener("click", () => switchSettingsTab(btn.dataset.tab));
   });
+
+  el.reminderDaysInput.addEventListener("change", () => {
+    const val = parseInt(el.reminderDaysInput.value, 10);
+    settings.reminderDays = val > 0 ? Math.min(30, val) : DEFAULT_SETTINGS.reminderDays;
+    el.reminderDaysInput.value = String(settings.reminderDays);
+    saveSettings();
+    render();
+  });
+
+  el.form.querySelectorAll('input[name="installmentsMode"]').forEach((radio) => {
+    radio.addEventListener("change", updateInstallmentsModeUI);
+  });
+  el.f_total.addEventListener("input", updateInstallmentsModeUI);
+  el.f_monthly.addEventListener("input", updateInstallmentsModeUI);
 
   el.detailCloseBtn.addEventListener("click", closeDetail);
   el.detailDeleteBtn.addEventListener("click", () => deleteLoan(currentDetailId));
@@ -1063,13 +1210,114 @@
     render();
   });
 
+  applyTheme();
   renderSettingsSheet();
   render();
+
+  // Czyści WYŁĄCZNIE Cache Storage service workera i jego rejestracje —
+  // nigdy localStorage, więc kredyty i historia są zawsze bezpieczne.
+  function clearServiceWorkerCaches() {
+    return Promise.all([
+      "serviceWorker" in navigator
+        ? navigator.serviceWorker.getRegistrations().then((regs) => Promise.all(regs.map((r) => r.unregister())))
+        : Promise.resolve(),
+      "caches" in window ? caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))) : Promise.resolve(),
+    ]);
+  }
+
+  // Ręczne odświeżenie (przycisk w topbarze / pull-to-refresh) — wymuszona,
+  // pełna aktualizacja na życzenie użytkownika.
+  function forceRefreshApp() {
+    if (el.pullIndicator) el.pullIndicator.classList.add("visible", "spinning");
+    clearServiceWorkerCaches().finally(() => window.location.reload());
+  }
+
+  // Samo-naprawa dla telefonów uwięzionych na starym service workerze (np.
+  // instalacja sprzed network-first fixa, która sama siebie blokuje przed
+  // zauważeniem aktualizacji). Pobiera app.js z serwera z pominięciem
+  // KAŻDEGO cache (unikalny query string + no-store) — to jedyny sposób,
+  // by ta prośba ominęła starego workera, bo trafia na inny klucz w jego
+  // Cache Storage.
+  function selfHealStaleServiceWorker() {
+    if (!("serviceWorker" in navigator) || !("caches" in window)) return;
+    if (sessionStorage.getItem("creditbar:justHealed")) return;
+
+    fetch(`app.js?healcheck=${Date.now()}`, { cache: "no-store" })
+      .then((r) => r.text())
+      .then((src) => {
+        const match = src.match(/APP_VERSION\s*=\s*"([^"]+)"/);
+        if (!match || match[1] === APP_VERSION) return;
+
+        sessionStorage.setItem("creditbar:justHealed", "1");
+        return clearServiceWorkerCaches().then(() => window.location.reload());
+      })
+      .catch(() => {});
+  }
+
+  selfHealStaleServiceWorker();
+
+  // ---- Ręczny refresh: przycisk + pull-to-refresh ----
+  // W trybie "Dodano do ekranu głównego" Safari nie pokazuje paska adresu
+  // ani przycisku odświeżania i wyłącza natywny pull-to-refresh, więc obie
+  // opcje trzeba zaimplementować samodzielnie.
+
+  el.refreshBtn.addEventListener("click", forceRefreshApp);
+
+  (function setupPullToRefresh() {
+    const indicator = el.pullIndicator;
+    if (!indicator) return;
+
+    const TRIGGER_PULL = 34; // px po przeskalowaniu ruchu palca (opór 0.5x)
+    let startY = null;
+    let pulling = false;
+    let triggered = false;
+
+    function sheetOrDialogOpen() {
+      return !!activeSheetEl || !el.amountDialog.hidden;
+    }
+
+    document.addEventListener("touchstart", (e) => {
+      if (window.scrollY > 0 || sheetOrDialogOpen()) {
+        startY = null;
+        return;
+      }
+      startY = e.touches[0].clientY;
+      pulling = true;
+      triggered = false;
+    }, { passive: true });
+
+    document.addEventListener("touchmove", (e) => {
+      if (!pulling || startY == null) return;
+      const delta = e.touches[0].clientY - startY;
+      if (delta <= 0) {
+        indicator.style.setProperty("--pull", "0px");
+        indicator.classList.remove("visible", "ready");
+        return;
+      }
+      const pull = Math.min(delta * 0.5, 90);
+      indicator.style.setProperty("--pull", `${pull}px`);
+      indicator.classList.add("visible");
+      indicator.classList.toggle("ready", pull >= TRIGGER_PULL);
+      triggered = pull >= TRIGGER_PULL;
+    }, { passive: true });
+
+    document.addEventListener("touchend", () => {
+      if (!pulling) return;
+      pulling = false;
+      if (triggered) {
+        forceRefreshApp();
+      } else {
+        indicator.classList.remove("visible", "ready");
+        indicator.style.setProperty("--pull", "0px");
+      }
+      startY = null;
+    });
+  })();
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("sw.js").then((reg) => {
-        reg.update();
+        reg.update().catch(() => {});
         // Nowa wersja service workera przejmuje kontrolę -> auto-odśwież raz,
         // żeby zmiany były widoczne od razu, bez ręcznego czyszczenia cache.
         let reloaded = false;

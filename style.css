@@ -49,6 +49,35 @@
   }
 }
 
+/* ---- Kolor akcentu (Ustawienia -> Wygląd) — nadpisuje tylko --primary-*,
+   reszta palety (tło, tekst, semantyka postępu) zostaje bez zmian. */
+
+html[data-accent="emerald"] { --primary-1: #10b981; --primary-2: #047857; }
+html[data-accent="violet"] { --primary-1: #8b5cf6; --primary-2: #6d28d9; }
+html[data-accent="rose"] { --primary-1: #f43f5e; --primary-2: #be123c; }
+html[data-accent="blue"] { --primary-1: #3b82f6; --primary-2: #1d4ed8; }
+
+@media (prefers-color-scheme: dark) {
+  html[data-accent="emerald"] { --primary-1: #34d399; --primary-2: #10b981; }
+  html[data-accent="violet"] { --primary-1: #a78bfa; --primary-2: #8b5cf6; }
+  html[data-accent="rose"] { --primary-1: #fb7185; --primary-2: #f43f5e; }
+  html[data-accent="blue"] { --primary-1: #60a5fa; --primary-2: #3b82f6; }
+}
+
+/* ---- Tło (Ustawienia -> Wygląd) — nadpisuje --bg i poświatę w tle. */
+
+html[data-bg="cream"] { --bg: #faf5ef; --bg-glow-1: #fed7aa; --bg-glow-2: #fecdd3; }
+html[data-bg="mist"] { --bg: #f4f5f7; --bg-glow-1: #e0e7ff; --bg-glow-2: #fbcfe8; }
+html[data-bg="sage"] { --bg: #f4f7f2; --bg-glow-1: #bbf7d0; --bg-glow-2: #fef08a; }
+html[data-bg="contrast"] { --bg: #ffffff; --bg-glow-1: #f1f5f9; --bg-glow-2: #f1f5f9; }
+
+@media (prefers-color-scheme: dark) {
+  html[data-bg="cream"] { --bg: #120e0a; --bg-glow-1: #9a3412; --bg-glow-2: #9f1239; }
+  html[data-bg="mist"] { --bg: #0b0c10; --bg-glow-1: #3730a3; --bg-glow-2: #831843; }
+  html[data-bg="sage"] { --bg: #0a0f0a; --bg-glow-1: #14532d; --bg-glow-2: #713f12; }
+  html[data-bg="contrast"] { --bg: #000000; --bg-glow-1: #18181b; --bg-glow-2: #18181b; }
+}
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 [hidden] { display: none !important; }
@@ -110,6 +139,12 @@ body {
   margin-bottom: 4px;
 }
 
+.topbar-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
 .icon-btn {
   width: 40px;
   height: 40px;
@@ -134,6 +169,46 @@ body {
   font-weight: 800;
   margin: 0;
   letter-spacing: -0.03em;
+}
+
+/* ---- Pull-to-refresh ---- */
+/* Custom, bo standalone PWA na iOS nie ma paska adresu ani natywnego
+   pull-to-refresh — trzeba to odtworzyć ręcznie gestem dotykowym. */
+
+.pull-indicator {
+  position: fixed;
+  top: env(safe-area-inset-top);
+  left: 50%;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--surface-solid);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  opacity: 0;
+  z-index: 15;
+  pointer-events: none;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  transform: translateX(-50%) translateY(calc(-46px + var(--pull, 0px))) rotate(calc(var(--pull, 0px) * 3deg));
+}
+
+.pull-indicator svg { width: 18px; height: 18px; }
+
+.pull-indicator.visible { opacity: 1; }
+.pull-indicator.ready { color: var(--primary-1); }
+
+.pull-indicator.spinning {
+  transform: translateX(-50%) translateY(28px);
+}
+
+.pull-indicator.spinning svg { animation: pull-spin 0.7s linear infinite; }
+
+@keyframes pull-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ---- Hero summary ---- */
@@ -890,6 +965,42 @@ body {
   gap: 12px;
 }
 
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 2px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.radio-option input[type="radio"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--primary-1);
+  flex: none;
+}
+
+.field-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.field input.is-computed {
+  color: var(--primary-1);
+  background: color-mix(in srgb, var(--primary-1) 8%, var(--surface-2));
+}
+
 .sheet-actions {
   display: flex;
   align-items: center;
@@ -1135,6 +1246,130 @@ body {
   margin-bottom: 8px;
 }
 
+.settings-tabs {
+  display: flex;
+  gap: 6px;
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 18px;
+}
+
+.settings-tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 9px 6px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.settings-tab.active {
+  background: var(--surface-solid);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.theme-swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  outline-offset: 3px;
+}
+
+.theme-swatch.active { outline: 2.5px solid var(--text); }
+
+.bg-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.bg-swatch {
+  width: 68px;
+  height: 46px;
+  border-radius: 12px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  outline-offset: 3px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.bg-swatch.active { outline: 2.5px solid var(--text); }
+
+.bg-swatch-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-solid) 75%, transparent);
+  width: 100%;
+  text-align: center;
+  padding: 2px 0;
+}
+
+.reminder-days-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 2px 15px;
+  margin-top: -6px;
+}
+
+.reminder-days-field span:first-child {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.reminder-days-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.reminder-days-input-wrap input {
+  width: 56px;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.reminder-days-input-wrap span {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 .toggle-row {
   display: flex;
   align-items: center;
@@ -1217,3 +1452,38 @@ body {
   border-radius: 12px;
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
+
+.sheet-section-danger { color: var(--danger); }
+
+.danger-zone {
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  border: 1.5px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.danger-zone-text {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.btn-danger-solid {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 13px;
+  font-size: 14.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(135deg, var(--danger), #9f1239);
+  box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--danger) 60%, transparent);
+}
+
+.btn-danger-solid:active { transform: scale(0.97); }
