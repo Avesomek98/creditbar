@@ -1,4 +1,4 @@
-const CACHE_NAME = "creditbar-cache-v2";
+const CACHE_NAME = "creditbar-cache-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -24,19 +24,21 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Network-first: gdy jest internet, zawsze bierz najświeższą wersję z serwera
+// (i dokładamy ją do cache przy okazji). Cache to wyłącznie awaryjny fallback
+// offline — nigdy nie blokuje aktualizacji, jak robił poprzedni "stale-while
+// -revalidate", przez który zmiany bywały widoczne dopiero po 2. odświeżeniu.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  if (new URL(event.request.url).origin !== self.location.origin) return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const networkFetch = fetch(event.request)
-        .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return response;
-        })
-        .catch(() => cached);
-      return cached || networkFetch;
-    })
+    fetch(event.request)
+      .then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

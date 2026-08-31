@@ -1,6 +1,10 @@
 (() => {
   "use strict";
 
+  // Bump this on every meaningful deploy so it's obvious from the footer
+  // whether an iPhone actually picked up the update.
+  const APP_VERSION = "0.5.0";
+
   const STORAGE_KEY = "creditbar:loans:v1";
   const SORT_KEY = "creditbar:sort:v1";
 
@@ -418,7 +422,10 @@
     chipPaid: document.getElementById("chipPaid"),
     chipMonthly: document.getElementById("chipMonthly"),
     chipCount: document.getElementById("chipCount"),
+    appVersion: document.getElementById("appVersion"),
   };
+
+  el.appVersion.textContent = `v${APP_VERSION}`;
 
   // ---- Toast (undo) ----
 
@@ -1061,7 +1068,17 @@
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("sw.js").catch(() => {});
+      navigator.serviceWorker.register("sw.js").then((reg) => {
+        reg.update();
+        // Nowa wersja service workera przejmuje kontrolę -> auto-odśwież raz,
+        // żeby zmiany były widoczne od razu, bez ręcznego czyszczenia cache.
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (reloaded) return;
+          reloaded = true;
+          window.location.reload();
+        });
+      }).catch(() => {});
     });
   }
 })();
