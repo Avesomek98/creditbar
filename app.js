@@ -160,6 +160,20 @@
     };
   }
 
+  // Date the *last* active loan is projected to hit zero — i.e. debt-free day.
+  function overallPayoffDate(list) {
+    const dates = list.filter((l) => !isPaidOff(l)).map(projectedPayoffDate).filter(Boolean);
+    if (!dates.length) return null;
+    return dates.reduce((max, d) => (d > max ? d : max));
+  }
+
+  // Highest-interest active loan — the debt-avalanche pick to pay off first.
+  function ratePriorityLoan(list) {
+    const withRate = list.filter((l) => !isPaidOff(l) && l.rate > 0);
+    if (!withRate.length) return null;
+    return withRate.reduce((top, l) => (l.rate > top.rate ? l : top));
+  }
+
   function sortLoans(list, sortBy) {
     const arr = [...list];
     switch (sortBy) {
@@ -232,8 +246,80 @@
     } catch {}
   }
 
+  // ---- Settings: which optional modules are switched on ----
+
+  const SETTINGS_KEY = "creditbar:settings:v1";
+
+  const DEFAULT_SETTINGS = {
+    features: {
+      summary: true,
+      totalProgress: true,
+      loanProgress: true,
+      history: true,
+      payInstallment: true,
+      overpayment: false,
+      debtChart: false,
+      calendar: false,
+      payoffEta: false,
+      ratePriority: false,
+      reminders: false,
+      autoInstallments: false,
+    },
+    dashboard: {
+      totalDebt: true,
+      totalPaid: true,
+      totalMonthly: true,
+      loanCount: true,
+      nextPayment: true,
+      loanCards: true,
+    },
+  };
+
+  const FEATURE_DEFS = [
+    { key: "summary", label: "Podsumowanie wszystkich kredytów", desc: "Karta z sumą zadłużenia na górze ekranu." },
+    { key: "totalProgress", label: "Progress całkowitego zadłużenia", desc: "Pierścień postępu w podsumowaniu." },
+    { key: "loanProgress", label: "Progress poszczególnych kredytów", desc: "Pasek postępu na karcie i w szczegółach kredytu." },
+    { key: "history", label: "Historia spłat", desc: "Lista wcześniejszych wpłat w szczegółach kredytu." },
+    { key: "payInstallment", label: "Przycisk „Opłać ratę”", desc: "Szybkie odnotowanie spłaty raty." },
+    { key: "overpayment", label: "Funkcja nadpłaty", desc: "Nadpłata zmniejsza saldo bez zmiany harmonogramu rat." },
+    { key: "debtChart", label: "Wykres zadłużenia", desc: "Porównanie zadłużenia w poszczególnych bankach." },
+    { key: "calendar", label: "Kalendarz rat", desc: "Lista najbliższych terminów płatności." },
+    { key: "payoffEta", label: "Przewidywana data wyjścia z długów", desc: "Szacowana data spłaty wszystkich kredytów." },
+    { key: "ratePriority", label: "Priorytet spłaty według oprocentowania", desc: "Podpowiada, który kredyt spłacać najpierw." },
+    { key: "reminders", label: "Przypomnienia o ratach", desc: "Baner, gdy rata zbliża się w ciągu 7 dni." },
+    { key: "autoInstallments", label: "Automatycznie obliczaj liczbę rat", desc: "Na podstawie kwoty i raty — możesz i tak nadpisać ręcznie." },
+  ];
+
+  const DASHBOARD_DEFS = [
+    { key: "totalDebt", label: "Łączne zadłużenie", desc: "" },
+    { key: "totalPaid", label: "Łącznie spłacono", desc: "" },
+    { key: "totalMonthly", label: "Łączna miesięczna rata", desc: "" },
+    { key: "loanCount", label: "Liczba kredytów", desc: "" },
+    { key: "nextPayment", label: "Najbliższa rata", desc: "" },
+    { key: "loanCards", label: "Karty kredytów", desc: "Lista kredytów poniżej podsumowania." },
+  ];
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return structuredClone(DEFAULT_SETTINGS);
+      const parsed = JSON.parse(raw);
+      return {
+        features: { ...DEFAULT_SETTINGS.features, ...parsed.features },
+        dashboard: { ...DEFAULT_SETTINGS.dashboard, ...parsed.dashboard },
+      };
+    } catch {
+      return structuredClone(DEFAULT_SETTINGS);
+    }
+  }
+
+  function saveSettings() {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }
+
   let loans = loadLoans();
   let currentSort = loadSort();
+  let settings = loadSettings();
   let editingId = null;
   let currentDetailId = null;
   let activeSheetEl = null;
@@ -307,6 +393,31 @@
     amountDialogInput: document.getElementById("amountDialogInput"),
     amountDialogConfirm: document.getElementById("amountDialogConfirm"),
     amountDialogCancel: document.getElementById("amountDialogCancel"),
+    settingsBtn: document.getElementById("settingsBtn"),
+    settingsSheet: document.getElementById("settingsSheet"),
+    settingsCloseBtn: document.getElementById("settingsCloseBtn"),
+    resetSettingsBtn: document.getElementById("resetSettingsBtn"),
+    featureToggles: document.getElementById("featureToggles"),
+    dashboardToggles: document.getElementById("dashboardToggles"),
+    toggleRowTemplate: document.getElementById("toggleRowTemplate"),
+    reminderBanner: document.getElementById("reminderBanner"),
+    reminderText: document.getElementById("reminderText"),
+    chipPayoffEta: document.getElementById("chipPayoffEta"),
+    sumPayoffEta: document.getElementById("sumPayoffEta"),
+    insightCardNextPayment: document.getElementById("insightCardNextPayment"),
+    insightCardRatePriority: document.getElementById("insightCardRatePriority"),
+    insightRatePriority: document.getElementById("insightRatePriority"),
+    debtChartSection: document.getElementById("debtChartSection"),
+    debtChart: document.getElementById("debtChart"),
+    calendarSection: document.getElementById("calendarSection"),
+    calendarList: document.getElementById("calendarList"),
+    calendarEmpty: document.getElementById("calendarEmpty"),
+    cardsHiddenNote: document.getElementById("cardsHiddenNote"),
+    heroRing: document.getElementById("heroRing"),
+    heroStatMain: document.getElementById("heroStatMain"),
+    chipPaid: document.getElementById("chipPaid"),
+    chipMonthly: document.getElementById("chipMonthly"),
+    chipCount: document.getElementById("chipCount"),
   };
 
   // ---- Toast (undo) ----
@@ -434,10 +545,70 @@
     if (handler) handler(round2(value));
   }
 
+  // ---- Settings sheet ----
+
+  function buildToggleRows(container, defs, group) {
+    container.innerHTML = "";
+    for (const def of defs) {
+      const node = el.toggleRowTemplate.content.cloneNode(true);
+      node.querySelector(".toggle-label").textContent = def.label;
+      const descEl = node.querySelector(".toggle-desc");
+      if (def.desc) descEl.textContent = def.desc;
+      else descEl.remove();
+      const input = node.querySelector(".switch-input");
+      input.checked = !!settings[group][def.key];
+      input.addEventListener("change", () => {
+        settings[group][def.key] = input.checked;
+        saveSettings();
+        render();
+      });
+      container.appendChild(node);
+    }
+  }
+
+  function renderSettingsSheet() {
+    buildToggleRows(el.featureToggles, FEATURE_DEFS, "features");
+    buildToggleRows(el.dashboardToggles, DASHBOARD_DEFS, "dashboard");
+  }
+
+  function openSettings() {
+    openGenericSheet(el.settingsSheet);
+  }
+
+  function closeSettings() {
+    closeGenericSheet();
+  }
+
+  function resetSettings() {
+    if (!confirm("Przywrócić domyślne ustawienia widoku i funkcji? Kredyty i historia spłat pozostaną bez zmian.")) return;
+    settings = structuredClone(DEFAULT_SETTINGS);
+    saveSettings();
+    renderSettingsSheet();
+    render();
+  }
+
   // ---- Rendering ----
 
+  const REMINDER_WINDOW_DAYS = 7;
+
+  function daysUntil(dateStr) {
+    const target = new Date(`${dateStr}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((target - today) / 86400000);
+  }
+
   function renderDashboard() {
+    const f = settings.features;
+    const d = settings.dashboard;
     const agg = aggregate(loans);
+
+    el.heroRing.hidden = !f.totalProgress;
+    el.heroStatMain.hidden = !d.totalDebt;
+    el.chipPaid.hidden = !d.totalPaid;
+    el.chipMonthly.hidden = !d.totalMonthly;
+    el.chipCount.hidden = !d.loanCount;
+    el.chipPayoffEta.hidden = !f.payoffEta;
 
     el.sumRemaining.textContent = currency.format(agg.totalRemaining);
     el.sumPaid.textContent = currencyCompact.format(agg.totalPaid);
@@ -449,12 +620,127 @@
     el.ringFill.style.strokeDasharray = String(RING_CIRCUMFERENCE);
     el.ringFill.style.strokeDashoffset = String(offset);
 
-    el.insightNextPayment.textContent = agg.nearestPaymentLoan
-      ? `${agg.nearestPaymentLoan.bank} • ${dateFmt.format(new Date(agg.nearestPaymentLoan.nextDate))}`
-      : "Brak zaplanowanych rat";
+    if (f.payoffEta) {
+      const eta = overallPayoffDate(loans);
+      el.sumPayoffEta.textContent = eta ? dateFmt.format(new Date(eta)) : "—";
+    }
+
+    el.insightCardNextPayment.hidden = !d.nextPayment;
+    if (d.nextPayment) {
+      el.insightNextPayment.textContent = agg.nearestPaymentLoan
+        ? `${agg.nearestPaymentLoan.bank} • ${dateFmt.format(new Date(agg.nearestPaymentLoan.nextDate))}`
+        : "Brak zaplanowanych rat";
+    }
+
     el.insightMostAdvanced.textContent = agg.mostAdvancedLoan
       ? `${agg.mostAdvancedLoan.bank} • ${Math.round(progressPct(agg.mostAdvancedLoan))}%`
       : "—";
+
+    el.insightCardRatePriority.hidden = !f.ratePriority;
+    if (f.ratePriority) {
+      const top = ratePriorityLoan(loans);
+      el.insightRatePriority.textContent = top ? `${top.bank} • ${top.rate}%` : "Brak danych o oprocentowaniu";
+    }
+
+    renderReminderBanner();
+    renderDebtChart();
+    renderCalendar();
+  }
+
+  function renderReminderBanner() {
+    if (!settings.features.reminders) {
+      el.reminderBanner.hidden = true;
+      return;
+    }
+    const due = loans
+      .filter((l) => !isPaidOff(l) && l.nextDate && daysUntil(l.nextDate) <= REMINDER_WINDOW_DAYS)
+      .sort((a, b) => (a.nextDate < b.nextDate ? -1 : 1));
+
+    if (!due.length) {
+      el.reminderBanner.hidden = true;
+      return;
+    }
+
+    const parts = due.map((l) => {
+      const dd = daysUntil(l.nextDate);
+      const when = dd < 0 ? "zaległa" : dd === 0 ? "dziś" : `za ${dd} dni`;
+      return `${l.bank} (${when})`;
+    });
+    el.reminderText.textContent = `${due.length > 1 ? "Nadchodzące raty" : "Nadchodząca rata"}: ${parts.join(", ")}`;
+    el.reminderBanner.hidden = false;
+  }
+
+  function renderDebtChart() {
+    if (!settings.features.debtChart) {
+      el.debtChartSection.hidden = true;
+      return;
+    }
+    const active = loans.filter((l) => !isPaidOff(l));
+    el.debtChartSection.hidden = active.length === 0;
+    el.debtChart.innerHTML = "";
+    if (!active.length) return;
+
+    const maxRemaining = Math.max(...active.map((l) => l.remaining || 0), 1);
+    for (const loan of [...active].sort((a, b) => (b.remaining || 0) - (a.remaining || 0))) {
+      const [c1, c2] = gradientForBank(loan.bank);
+
+      const row = document.createElement("div");
+      row.className = "debt-chart-row";
+
+      const labels = document.createElement("div");
+      labels.className = "debt-chart-labels";
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = loan.bank;
+      const amountSpan = document.createElement("span");
+      amountSpan.textContent = currency.format(loan.remaining || 0);
+      labels.append(nameSpan, amountSpan);
+
+      const track = document.createElement("div");
+      track.className = "debt-chart-track";
+      const fill = document.createElement("div");
+      fill.className = "debt-chart-fill";
+      fill.style.width = `${((loan.remaining || 0) / maxRemaining) * 100}%`;
+      fill.style.background = `linear-gradient(90deg, ${c1}, ${c2})`;
+      track.appendChild(fill);
+
+      row.append(labels, track);
+      el.debtChart.appendChild(row);
+    }
+  }
+
+  function renderCalendar() {
+    if (!settings.features.calendar) {
+      el.calendarSection.hidden = true;
+      return;
+    }
+    el.calendarSection.hidden = loans.length === 0;
+    el.calendarList.innerHTML = "";
+
+    const upcoming = loans
+      .filter((l) => !isPaidOff(l) && l.nextDate)
+      .sort((a, b) => (a.nextDate < b.nextDate ? -1 : 1));
+
+    el.calendarEmpty.hidden = upcoming.length > 0;
+
+    for (const loan of upcoming) {
+      const row = document.createElement("div");
+      row.className = "calendar-item";
+
+      const dateSpan = document.createElement("span");
+      dateSpan.className = "calendar-date";
+      dateSpan.textContent = dateFmt.format(new Date(loan.nextDate));
+
+      const bankSpan = document.createElement("span");
+      bankSpan.className = "calendar-bank";
+      bankSpan.textContent = loan.bank;
+
+      const amountSpan = document.createElement("span");
+      amountSpan.className = "calendar-amount";
+      amountSpan.textContent = loan.monthly ? currency.format(loan.monthly) : "—";
+
+      row.append(dateSpan, bankSpan, amountSpan);
+      el.calendarList.appendChild(row);
+    }
   }
 
   function buildCard(loan) {
@@ -476,16 +762,18 @@
 
     const pctEl = card.querySelector(".card-pct");
     const statusEl = card.querySelector(".card-status-badge");
+    const showProgress = settings.features.loanProgress;
     if (paidOff) {
       pctEl.hidden = true;
-      statusEl.hidden = false;
+      statusEl.hidden = !showProgress;
     } else {
-      pctEl.hidden = false;
+      pctEl.hidden = !showProgress;
       pctEl.textContent = `${Math.round(pct)}%`;
       pctEl.classList.add(bucket);
       statusEl.hidden = true;
     }
 
+    card.querySelector(".progress-track").hidden = !showProgress;
     card.querySelector(".progress-fill").style.width = `${pct}%`;
     card.querySelector(".progress-fill").classList.add(bucket);
 
@@ -502,7 +790,7 @@
     card.querySelector(".card-meta").textContent = metaParts.join(" · ");
 
     const payBtn = card.querySelector(".pay-btn");
-    if (!paidOff) {
+    if (!paidOff && settings.features.payInstallment) {
       payBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         promptPayInstallment(loan.id);
@@ -517,15 +805,19 @@
 
   function render() {
     const hasLoans = loans.length > 0;
+    const showCards = settings.dashboard.loanCards;
+
     el.emptyState.hidden = hasLoans;
-    el.hero.hidden = !hasLoans;
+    el.hero.hidden = !hasLoans || !settings.features.summary;
     el.insights.hidden = !hasLoans;
-    el.listHeading.hidden = !hasLoans;
+    el.listHeading.hidden = !hasLoans || !showCards;
+    el.list.hidden = !showCards;
     el.list.innerHTML = "";
+    el.cardsHiddenNote.hidden = !hasLoans || showCards;
 
     renderDashboard();
 
-    if (!hasLoans) return;
+    if (!hasLoans || !showCards) return;
 
     for (const loan of sortLoans(loans, currentSort)) {
       el.list.appendChild(buildCard(loan));
@@ -560,12 +852,16 @@
     const remLeft = remainingInstallments(loan);
 
     const [c1, c2] = gradientForBank(loan.bank);
+    const showProgress = settings.features.loanProgress;
+
     el.detailAvatar.style.background = `linear-gradient(135deg, ${c1}, ${c2})`;
     el.detailAvatar.textContent = initialsForBank(loan.bank);
     el.detailName.textContent = loan.name || loan.bank;
     el.detailBank.textContent = loan.bank;
-    el.detailPaidBadge.hidden = !paidOff;
+    el.detailPaidBadge.hidden = !paidOff || !showProgress;
 
+    el.detailProgressFill.parentElement.hidden = !showProgress;
+    el.detailPct.closest(".detail-pct-row").hidden = !showProgress;
     el.detailProgressFill.style.width = `${pct}%`;
     el.detailProgressFill.classList.remove("p-low", "p-mid", "p-high");
     el.detailProgressFill.classList.add(progressBucket(pct));
@@ -581,10 +877,15 @@
     el.detailNextDate.textContent = loan.nextDate ? dateFmt.format(new Date(loan.nextDate)) : "—";
     el.detailPayoffDate.textContent = paidOff ? "Spłacono" : (payoff ? dateFmt.format(new Date(payoff)) : "—");
 
-    el.detailPayBtn.hidden = paidOff;
-    el.detailOverpayBtn.hidden = paidOff;
+    el.detailPayBtn.hidden = paidOff || !settings.features.payInstallment;
+    el.detailOverpayBtn.hidden = paidOff || !settings.features.overpayment;
 
-    renderHistory(loan);
+    const showHistory = settings.features.history;
+    el.detailSheet.querySelector(".sheet-section").hidden = !showHistory;
+    el.historyList.hidden = !showHistory;
+    if (showHistory) renderHistory(loan);
+    else el.historyEmpty.hidden = true;
+
     openGenericSheet(el.detailSheet);
   }
 
@@ -595,11 +896,14 @@
 
   // ---- Add / edit sheet ----
 
+  let installmentsManuallyEdited = false;
+
   function openAdd() {
     editingId = null;
     el.sheetTitle.textContent = "Nowy kredyt";
     el.deleteBtn.hidden = true;
     el.form.reset();
+    installmentsManuallyEdited = false;
     openGenericSheet(el.sheet);
   }
 
@@ -620,8 +924,20 @@
     el.f_installmentsPaid.value = loan.installmentsPaid ?? "";
     el.f_nextDate.value = loan.nextDate || "";
     el.f_notes.value = loan.notes || "";
+    installmentsManuallyEdited = loan.installmentsTotal > 0;
 
     openGenericSheet(el.sheet);
+  }
+
+  // Ustawienia → "Automatycznie obliczaj liczbę rat": liczy total/monthly na
+  // bieżąco, ale przestaje nadpisywać pole, gdy użytkownik sam je zmieni.
+  function maybeAutoFillInstallments() {
+    if (!settings.features.autoInstallments || installmentsManuallyEdited) return;
+    const total = parseFloat(el.f_total.value);
+    const monthly = parseFloat(el.f_monthly.value);
+    if (total > 0 && monthly > 0) {
+      el.f_installmentsTotal.value = String(Math.ceil(total / monthly));
+    }
   }
 
   function closeSheet() {
@@ -700,6 +1016,17 @@
   el.sheetBackdrop.addEventListener("click", () => {
     if (activeSheetEl === el.sheet) closeSheet();
     else if (activeSheetEl === el.detailSheet) closeDetail();
+    else if (activeSheetEl === el.settingsSheet) closeSettings();
+  });
+
+  el.settingsBtn.addEventListener("click", openSettings);
+  el.settingsCloseBtn.addEventListener("click", closeSettings);
+  el.resetSettingsBtn.addEventListener("click", resetSettings);
+
+  el.f_total.addEventListener("input", maybeAutoFillInstallments);
+  el.f_monthly.addEventListener("input", maybeAutoFillInstallments);
+  el.f_installmentsTotal.addEventListener("input", () => {
+    installmentsManuallyEdited = true;
   });
 
   el.detailCloseBtn.addEventListener("click", closeDetail);
@@ -729,6 +1056,7 @@
     render();
   });
 
+  renderSettingsSheet();
   render();
 
   if ("serviceWorker" in navigator) {
