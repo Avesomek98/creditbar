@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Moje Kredyty</title>
+
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#4f46e5" />
+<link rel="icon" href="icons/icon-192.png" />
+
+<!-- iOS: instalacja jako PWA -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Kredyty" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="bg-glow" aria-hidden="true"></div>
+
+<div class="app">
+  <header class="topbar">
+    <div class="topbar-titles">
+      <span class="eyebrow">Panel finansowy</span>
+      <h1>Moje Kredyty</h1>
+    </div>
+  </header>
+
+  <section id="hero" class="hero" hidden>
+    <div class="hero-ring">
+      <svg viewBox="0 0 120 120" class="ring-svg">
+        <defs>
+          <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" class="ring-stop-start" />
+            <stop offset="100%" class="ring-stop-end" />
+          </linearGradient>
+        </defs>
+        <circle class="ring-track" cx="60" cy="60" r="52" />
+        <circle id="ringFill" class="ring-fill" cx="60" cy="60" r="52" />
+      </svg>
+      <div class="hero-ring-label">
+        <span id="heroPct">0%</span>
+        <small>spłacono</small>
+      </div>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat-main">
+        <span class="hero-stat-label">Pozostało do spłaty</span>
+        <span class="hero-stat-value" id="sumRemaining">—</span>
+      </div>
+      <div class="hero-stat-row">
+        <div class="hero-stat-chip">
+          <span id="sumMonthly">—</span>
+          <small>rata / mies.</small>
+        </div>
+        <div class="hero-stat-chip">
+          <span id="loanCount">0</span>
+          <small>aktywne kredyty</small>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="list-heading" id="listHeading" hidden>
+    <h2>Twoje kredyty</h2>
+  </div>
+
+  <main id="list" class="list"></main>
+
+  <div id="emptyState" class="empty-state" hidden>
+    <div class="empty-illustration" aria-hidden="true">
+      <svg viewBox="0 0 80 80" fill="none">
+        <circle cx="40" cy="40" r="38" class="empty-ring" />
+        <path d="M24 46 L34 34 L44 42 L58 26" class="empty-path" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        <circle cx="58" cy="26" r="4" class="empty-dot" />
+      </svg>
+    </div>
+    <p class="empty-title">Brak kredytów na liście</p>
+    <p class="empty-sub">Dodaj pierwszy kredyt lub pożyczkę, żeby zacząć śledzić spłatę.</p>
+    <button id="emptyAddBtn" class="btn-primary">+ Dodaj pierwszy kredyt</button>
+  </div>
+</div>
+
+<button id="fab" class="fab" aria-label="Dodaj kredyt">+</button>
+
+<!-- Formularz dodawania / edycji -->
+<div id="sheetBackdrop" class="sheet-backdrop" hidden></div>
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-handle"></div>
+  <form id="loanForm">
+    <h2 id="sheetTitle">Nowy kredyt</h2>
+
+    <h3 class="sheet-section">Podstawowe informacje</h3>
+    <label class="field">
+      <span>Bank *</span>
+      <input type="text" id="f_bank" required placeholder="np. mBank" />
+    </label>
+
+    <label class="field">
+      <span>Nazwa kredytu</span>
+      <input type="text" id="f_name" placeholder="np. Kredyt gotówkowy" />
+    </label>
+
+    <h3 class="sheet-section">Kwoty i raty</h3>
+    <div class="field-row">
+      <label class="field">
+        <span>Kwota całkowita (zł) *</span>
+        <input type="number" id="f_total" required min="0" step="0.01" inputmode="decimal" />
+      </label>
+      <label class="field">
+        <span>Pozostało do spłaty (zł) *</span>
+        <input type="number" id="f_remaining" required min="0" step="0.01" inputmode="decimal" />
+      </label>
+    </div>
+
+    <div class="field-row">
+      <label class="field">
+        <span>Rata miesięczna (zł)</span>
+        <input type="number" id="f_monthly" min="0" step="0.01" inputmode="decimal" />
+      </label>
+      <label class="field">
+        <span>Oprocentowanie (%)</span>
+        <input type="number" id="f_rate" min="0" step="0.01" inputmode="decimal" />
+      </label>
+    </div>
+
+    <div class="field-row">
+      <label class="field">
+        <span>Liczba rat</span>
+        <input type="number" id="f_installmentsTotal" min="0" step="1" inputmode="numeric" />
+      </label>
+      <label class="field">
+        <span>Spłaconych rat</span>
+        <input type="number" id="f_installmentsPaid" min="0" step="1" inputmode="numeric" />
+      </label>
+    </div>
+
+    <h3 class="sheet-section">Terminy i notatki</h3>
+    <label class="field">
+      <span>Kolejna płatność (data)</span>
+      <input type="date" id="f_nextDate" />
+    </label>
+
+    <label class="field">
+      <span>Notatki</span>
+      <textarea id="f_notes" rows="2" placeholder="opcjonalnie"></textarea>
+    </label>
+
+    <div class="sheet-actions">
+      <button type="button" id="deleteBtn" class="btn-danger" hidden>Usuń</button>
+      <div class="sheet-actions-right">
+        <button type="button" id="cancelBtn" class="btn-secondary">Anuluj</button>
+        <button type="submit" class="btn-primary">Zapisz</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<template id="loanCardTemplate">
+  <article class="card">
+    <div class="card-top">
+      <div class="card-bank">
+        <div class="bank-avatar"></div>
+        <div class="card-titles">
+          <span class="card-name"></span>
+          <span class="card-bank-name"></span>
+        </div>
+      </div>
+      <div class="card-pct-wrap">
+        <span class="card-pct"></span>
+        <svg class="card-chevron" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill"></div>
+    </div>
+    <div class="card-bottom">
+      <div class="card-amounts">
+        <span class="card-remaining"></span>
+        <span class="card-total"></span>
+      </div>
+      <span class="card-installments"></span>
+    </div>
+    <div class="card-meta"></div>
+  </article>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
