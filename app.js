@@ -3,7 +3,7 @@
 
   // Bump this on every meaningful deploy so it's obvious from the footer
   // whether an iPhone actually picked up the update.
-  const APP_VERSION = "0.5.0";
+  const APP_VERSION = "0.5.1";
 
   const STORAGE_KEY = "creditbar:loans:v1";
   const SORT_KEY = "creditbar:sort:v1";
