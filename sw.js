@@ -1,4 +1,4 @@
-const CACHE_NAME = "creditbar-cache-v5";
+const CACHE_NAME = "creditbar-cache-v6";
 const ASSETS = [
   "./",
   "./index.html",

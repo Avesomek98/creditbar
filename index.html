@@ -15,7 +15,7 @@
 <meta name="apple-mobile-web-app-title" content="Kredyty" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 
-<link rel="stylesheet" href="style.css?v=0.7.0" />
+<link rel="stylesheet" href="style.css?v=0.7.1" />
 </head>
 <body>
 
@@ -356,7 +356,21 @@
     <button type="button" id="detailPayBtn" class="btn-primary">Opłać ratę</button>
     <button type="button" id="detailOverpayBtn" class="btn-secondary">Nadpłać</button>
   </div>
-  <button type="button" id="detailSimulatorBtn" class="btn-secondary simulator-open-btn" hidden>🧮 Symuluj nadpłatę miesięczną</button>
+  <button type="button" id="detailSimulatorBtn" class="btn-secondary simulator-open-btn" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect width="16" height="20" x="4" y="2" rx="2"/>
+      <line x1="8" x2="16" y1="6" y2="6"/>
+      <line x1="16" x2="16" y1="14" y2="18"/>
+      <path d="M16 10h.01"/>
+      <path d="M12 10h.01"/>
+      <path d="M8 10h.01"/>
+      <path d="M12 14h.01"/>
+      <path d="M8 14h.01"/>
+      <path d="M12 18h.01"/>
+      <path d="M8 18h.01"/>
+    </svg>
+    Symuluj nadpłatę
+  </button>
 
   <h3 class="sheet-section">Historia spłat</h3>
   <div id="historyList" class="history-list"></div>
@@ -394,6 +408,22 @@
   <label class="field">
     <span>Dodatkowa wpłata co miesiąc (zł)</span>
     <input type="number" id="simulatorExtraInput" min="0" step="10" inputmode="decimal" value="0" />
+  </label>
+
+  <label class="toggle-row simulator-duration-toggle">
+    <div class="toggle-text">
+      <span class="toggle-label">Nadpłacaj do końca kredytu</span>
+      <span class="toggle-desc">Wyłącz, żeby ograniczyć do konkretnej liczby miesięcy.</span>
+    </div>
+    <span class="switch">
+      <input type="checkbox" class="switch-input" id="simulatorForeverToggle" checked />
+      <span class="switch-track"><span class="switch-thumb"></span></span>
+    </span>
+  </label>
+
+  <label class="field" id="simulatorDurationField" hidden>
+    <span>Przez ile miesięcy nadpłacać</span>
+    <input type="number" id="simulatorDurationInput" min="1" step="1" inputmode="numeric" value="1" />
   </label>
 
   <div class="simulator-results" id="simulatorResults">

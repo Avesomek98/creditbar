@@ -1240,9 +1240,22 @@ body {
   width: 100%;
   margin-top: 8px;
   margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
+.simulator-open-btn svg { width: 17px; height: 17px; flex: none; }
+
 .simulator-dialog { width: min(380px, calc(100vw - 40px)); }
+
+.simulator-duration-toggle {
+  padding: 10px 2px;
+  margin-bottom: 4px;
+}
+
+.simulator-duration-toggle .toggle-label { font-size: 13px; }
 
 .simulator-loan-name {
   margin: -8px 0 14px;

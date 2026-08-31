@@ -3,7 +3,7 @@
 
   // Bump this on every meaningful deploy so it's obvious from the footer
   // whether an iPhone actually picked up the update.
-  const APP_VERSION = "0.7.0";
+  const APP_VERSION = "0.7.1";
 
   const STORAGE_KEY = "creditbar:loans:v1";
   const SORT_KEY = "creditbar:sort:v1";
@@ -178,7 +178,9 @@
   // część kapitałowa = kwota początkowa / liczba rat — bez tego się nie da.
   const SIMULATION_MAX_MONTHS = 720;
 
-  function simulateMonthsToPayoff(loan, extraMonthly) {
+  // extraDurationMonths: przez ile pierwszych miesięcy doliczać nadpłatę
+  // (Infinity = do końca kredytu). Po jej wyczerpaniu wraca zwykła rata.
+  function simulateMonthsToPayoff(loan, extraMonthly, extraDurationMonths = Infinity) {
     let balance = loan.remaining || 0;
     if (balance <= 0) return 0;
 
@@ -192,10 +194,11 @@
 
     let months = 0;
     while (balance > 0.005 && months < SIMULATION_MAX_MONTHS) {
+      const extra = months < extraDurationMonths ? extraMonthly : 0;
       const interest = balance * i;
       const principalPortion = declining
-        ? fixedPrincipal + extraMonthly
-        : (loan.monthly || 0) + extraMonthly - interest;
+        ? fixedPrincipal + extra
+        : (loan.monthly || 0) + extra - interest;
 
       if (principalPortion <= 0) return null; // rata nie starcza nawet na odsetki
       balance -= principalPortion;
@@ -496,6 +499,9 @@
     simulatorDialog: document.getElementById("simulatorDialog"),
     simulatorLoanName: document.getElementById("simulatorLoanName"),
     simulatorExtraInput: document.getElementById("simulatorExtraInput"),
+    simulatorForeverToggle: document.getElementById("simulatorForeverToggle"),
+    simulatorDurationField: document.getElementById("simulatorDurationField"),
+    simulatorDurationInput: document.getElementById("simulatorDurationInput"),
     simulatorResults: document.getElementById("simulatorResults"),
     simulatorBaseDate: document.getElementById("simulatorBaseDate"),
     simulatorFastDate: document.getElementById("simulatorFastDate"),
@@ -616,6 +622,9 @@
     el.simulatorLoanName.textContent = `${loan.name || loan.bank} — ${loan.bank}`;
     el.simulatorTypeLabel.textContent = loan.installmentType === "declining" ? "malejące" : "równe";
     el.simulatorExtraInput.value = "0";
+    el.simulatorForeverToggle.checked = true;
+    el.simulatorDurationField.hidden = true;
+    el.simulatorDurationInput.value = "1";
     updateSimulatorResults();
     el.simulatorBackdrop.hidden = false;
     el.simulatorDialog.hidden = false;
@@ -627,13 +636,20 @@
     simulatorLoanId = null;
   }
 
+  function getSimulatorDuration() {
+    if (el.simulatorForeverToggle.checked) return Infinity;
+    const val = parseInt(el.simulatorDurationInput.value, 10);
+    return val > 0 ? val : 1;
+  }
+
   function updateSimulatorResults() {
     const loan = loans.find((l) => l.id === simulatorLoanId);
     if (!loan) return;
 
     const extra = Math.max(0, parseFloat(el.simulatorExtraInput.value) || 0);
+    const duration = getSimulatorDuration();
     const baseMonths = simulateMonthsToPayoff(loan, 0);
-    const fastMonths = simulateMonthsToPayoff(loan, extra);
+    const fastMonths = simulateMonthsToPayoff(loan, extra, duration);
 
     if (baseMonths == null) {
       el.simulatorBaseDate.textContent = "—";
@@ -1316,6 +1332,11 @@
   el.simulatorCloseBtn.addEventListener("click", closeSimulator);
   el.simulatorBackdrop.addEventListener("click", closeSimulator);
   el.simulatorExtraInput.addEventListener("input", updateSimulatorResults);
+  el.simulatorDurationInput.addEventListener("input", updateSimulatorResults);
+  el.simulatorForeverToggle.addEventListener("change", () => {
+    el.simulatorDurationField.hidden = el.simulatorForeverToggle.checked;
+    updateSimulatorResults();
+  });
 
   el.amountDialogCancel.addEventListener("click", closeAmountDialog);
   el.amountDialogBackdrop.addEventListener("click", closeAmountDialog);
